@@ -1,0 +1,90 @@
+name: CI Tests
+
+on:
+  push:
+    branches:
+      - master
+      - github_actions
+
+env:
+  CARGO_TERM_COLOR: always
+
+
+# See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
+# This will ensure that only one commit will be running tests at a time on each PR.
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  check_and_test:
+    name: Check
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ["stable"]
+        backend: ["postgres"]
+        os: [ubuntu-lastest, macos-latest, windows-2019]
+    runs-on: ${{ matrix.os  }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os  }}-${{ matrix.backend  }}-cargo-${{ hashFiles('**Cargo.toml')  }}
+
+      
+      - name: Install postgres (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev postgresql
+          echo "host all all 127.0.0.1/32 md5" > sudo tee -a /etc/postgresql/10/main/pg_hba.conf
+          sudo service postgresql restart && sleep 3
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+          sudo service postgresql restart && sleep 3
+          echo "PG_DATABASE_URL=postgres://postgres:postgres@localhost/" >> $GITHUB_ENV
+          echo "PG_EXAMPLE_DATABASE_URL=postgres://postgres:postgres@localhost/pqsys_example" >> $GITHUB_ENV
+
+      - name: Install postgres (MacOS)
+        if: runner.os == 'macOS'
+        run: |
+          /usr/local/opt/postgres/bin/pg_ctl -D /usr/local/var/postgres start
+          sleep 3
+          /usr/local/opt/postgres/bin/createuser -s postgres
+          echo "PG_DATABASE_URL=postgres://postgres@localhost/" >> $GITHUB_ENV
+          echo "PG_EXAMPLE_DATABASE_URL=postgres://postgres@localhost/pqsys_example" >> $GITHUB_ENV
+
+      - name: Install postgres (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          choco install postgresql12 --force --params '/Password:root'
+          echo "C:\Program Files\PostgreSQL\12\bin" >> $GITHUB_PATH
+          echo "C:\Program Files\PostgreSQL\12\lib" >> $GITHUB_PATH
+          echo "PQ_LIB_DIR=C:\Program Files\PostgreSQL\12\lib" >> $GITHUB_ENV
+          echo "PG_DATABASE_URL=postgres://postgres:root@localhost/" >> $GITHUB_ENV
+          echo "PG_EXAMPLE_DATABASE_URL=postgres://postgres:root@localhost/diesel_example" >> $GITHUB_ENV
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Rust version check
+        shell: bash
+        run: |
+          cargo +${{ matrix.rust }} --version
+          rustc +${{ matrix.rust }} --version
+
+      - name: Test ps-sys
+        shell: bash
+        run: cargo +${{ matrix.rust }} test
+          
+      
+
