@@ -3,7 +3,6 @@ name: CI Tests
 on:
   push:
     branches:
-      - master
       - github_actions
 
 env:
@@ -24,7 +23,7 @@ jobs:
       matrix:
         rust: ["stable"]
         backend: ["postgres"]
-        os: [ubuntu-lastest, macos-latest, windows-2019]
+        os: [ubuntu-latest, macos-latest, windows-2019]
     runs-on: ${{ matrix.os  }}
     steps:
       - name: Checkout sources
@@ -70,6 +69,7 @@ jobs:
           echo "PQ_LIB_DIR=C:\Program Files\PostgreSQL\12\lib" >> $GITHUB_ENV
           echo "PG_DATABASE_URL=postgres://postgres:root@localhost/" >> $GITHUB_ENV
           echo "PG_EXAMPLE_DATABASE_URL=postgres://postgres:root@localhost/diesel_example" >> $GITHUB_ENV
+
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
